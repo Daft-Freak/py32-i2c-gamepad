@@ -1,0 +1,6 @@
+[
+    {
+      "name": "py32f002ax5",
+      "toolchainFile": "${workspaceFolder}/py32f002ax5.toolchain"
+    }
+]
