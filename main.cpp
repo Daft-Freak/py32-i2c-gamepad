@@ -1,6 +1,6 @@
-extern "C" void SystemInit(){} // FIXME
-
 int main()
 {
+    while(true);
+
     return 0;
 }
