@@ -47,6 +47,26 @@ static void init_uart(int baud)
                   | alt_func_uart << (rx * 4) | alt_func_uart << (tx * 4);
 }
 
+static void init_systick()
+{
+    // 1ms at 8MHz
+    SysTick->LOAD = 8000000 / 1000 - 1;
+    SysTick->VAL = 0;
+    SysTick->CTRL = SysTick_CTRL_CLKSOURCE_Msk | SysTick_CTRL_ENABLE_Msk;
+}
+
+static void delay_ms(int ms)
+{
+    (void)SysTick->CTRL; // clear flag
+
+    // count flags
+    while(ms)
+    {
+        if(SysTick->CTRL & SysTick_CTRL_COUNTFLAG_Msk)
+            ms--;
+    }
+}
+
 static void uart_putc(char c)
 {
     USART1->CR1 |= USART_CR1_TE;
@@ -68,7 +88,7 @@ static void uart_puts(const char *s)
 int main()
 {
     init_hsi();
-    // TODO: systick
+    init_systick();
     init_uart(115200);
 
     uart_puts("testing!\n");
