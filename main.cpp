@@ -107,15 +107,76 @@ static int uart_printf(const char *format, ...) {
     return ret;
 }
 
+static uint16_t adc_val[2];
+
+static void init_adc()
+{
+    // enable ADC clock
+    RCC->APBENR2 |= RCC_APBENR2_ADCEN;
+
+    // setup ADC
+
+    // EOCIE intr in ADC_IER?
+
+    // calibrate
+    ADC1->CR = 0;
+    ADC1->CR = ADC_CR_ADCAL;
+    while(ADC1->CR & ADC_CR_ADCAL);
+
+    delay_ms(1);
+
+    ADC1->CFGR1 = ADC_CFGR1_DISCEN;
+    ADC1->CFGR2 = 0; // div = 1?
+    ADC1->SMPR = 6; // 71.5 cycles
+    ADC1->CHSELR = 3 << 8; // B0/1
+
+    ADC1->CR = ADC_CR_ADEN;
+
+    // enable GPIO clock
+    RCC->IOPENR |= RCC_IOPENR_GPIOBEN;
+
+    // setup IO
+    int adc_x = 0; // B
+    int adc_y = 1;
+    const int mode_analog = 3;
+
+    GPIOA->MODER = (GPIOA->MODER & ~(GPIO_MODER_MODE0 << (adc_x * 2) | GPIO_MODER_MODE0 << (adc_y * 2)))
+                 | mode_analog << (adc_x * 2) | mode_analog << (adc_y * 2);
+}
+
 int main()
 {
     init_hsi();
     init_systick();
     init_uart(115200);
+    init_adc();
 
     uart_puts("testing!\n");
 
-    while(true);
+    while(true)
+    {
+        // read ADC
+        uint16_t new_val[2];
+        for(int i = 0; i < 2; i++)
+        {
+            ADC1->CR = ADC_CR_ADEN; // needing to re-enable seems strange?
+            ADC1->CR = ADC_CR_ADSTART;
+
+            while(!(ADC1->ISR & ADC_ISR_EOC));
+            ADC1->ISR = ADC_ISR_EOC;
+
+            new_val[i] = ADC1->DR;
+        }
+
+        if(new_val[0] != adc_val[0] || new_val[1] != adc_val[1])
+        {
+            adc_val[0] = new_val[0];
+            adc_val[1] = new_val[1];
+            uart_printf("ADC: %02X %02X\n", adc_val[0], adc_val[1]);
+        }
+
+        delay_ms(100);
+    }
 
     return 0;
 }
