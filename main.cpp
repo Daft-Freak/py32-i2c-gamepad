@@ -1,3 +1,4 @@
+#include <cmath>
 #include <cstdarg>
 #include <cstdio>
 
@@ -168,7 +169,7 @@ int main()
             new_val[i] = ADC1->DR;
         }
 
-        if(new_val[0] != adc_val[0] || new_val[1] != adc_val[1])
+        if(std::abs(new_val[0] - adc_val[0]) > 8 || std::abs(new_val[1] - adc_val[1]) > 8)
         {
             adc_val[0] = new_val[0];
             adc_val[1] = new_val[1];
