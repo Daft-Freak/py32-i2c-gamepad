@@ -204,7 +204,20 @@ int main()
     init_uart(115200);
     init_adc();
 
+    // more inputs
+    gpio_set_mode(GPIOA, 0, GPIO_MODE_ALTERNATE);
+    gpio_set_pulls(GPIOA, 0, GPIO_PULL_UP);
+    gpio_set_mode(GPIOA, 1, GPIO_MODE_ALTERNATE);
+    gpio_set_pulls(GPIOA, 1, GPIO_PULL_UP);
+
+    for(int i = 4; i < 8; i++) {
+        gpio_set_mode(GPIOA, i, GPIO_MODE_ALTERNATE);
+        gpio_set_pulls(GPIOA, i, GPIO_PULL_UP);
+    }
+
     uart_puts("testing!\n");
+
+    uint16_t inputs = 0;
 
     while(true)
     {
@@ -226,6 +239,20 @@ int main()
             adc_val[0] = new_val[0];
             adc_val[1] = new_val[1];
             uart_printf("ADC: %02X %02X\n", adc_val[0], adc_val[1]);
+        }
+
+        auto new_inputs = gpio_get(GPIOA);
+
+        auto changed = new_inputs ^ inputs;
+        inputs = new_inputs;
+
+        if(changed)
+        {
+            for(int i = 0; i < 8; i++)
+            {
+                if(changed & (1 << i))
+                    uart_printf("i %i: %i\n", i, new_inputs & (1 << i));
+            }
         }
 
         delay_ms(100);
