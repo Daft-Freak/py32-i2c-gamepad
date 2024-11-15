@@ -1,3 +1,6 @@
+#include <cstdarg>
+#include <cstdio>
+
 #include "py32f0xx.h"
 
 static void init_hsi()
@@ -83,6 +86,25 @@ static void uart_puts(const char *s)
 {
     while(*s)
         uart_putc(*s++);
+}
+
+static int uart_printf(const char *format, ...) {
+    va_list args;
+    va_start(args, format);
+
+    // get length
+    va_list tmp_args;
+    va_copy(tmp_args, args);
+    int len = vsnprintf(nullptr, 0, format, tmp_args) + 1;
+    va_end(tmp_args);
+
+    auto buf = new char[len];
+    int ret = vsnprintf(buf, len, format, args);
+    uart_puts(buf);
+    va_end(args);
+
+    delete[] buf;
+    return ret;
 }
 
 int main()
