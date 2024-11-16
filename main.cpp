@@ -161,6 +161,80 @@ static int uart_printf(const char *format, ...) {
     return ret;
 }
 
+static uint8_t i2c_read_data[4];
+static int i2c_read_offset = 0;
+
+static void init_i2c_slave()
+{
+    // enable I2C clock
+    RCC->APBENR1 |= RCC_APBENR1_I2CEN;
+
+    I2C1->CR2 = I2C_CR2_ITEVTEN | I2C_CR2_ITERREN | 8 << I2C_CR2_FREQ_Pos;
+    I2C1->OAR1 = 0x55 << 1;
+    I2C1->CR1 = I2C_CR1_PE;
+
+    // enable GPIO clock
+    RCC->IOPENR |= RCC_IOPENR_GPIOFEN;
+
+    // setup IO
+    const int sda = 0; //F
+    const int scl = 1;
+    const int alt_func_i2c = 12;
+    gpio_set_mode(GPIOF, sda, GPIO_MODE_ALTERNATE);
+    gpio_set_mode(GPIOF, scl, GPIO_MODE_ALTERNATE);
+    gpio_set_speed(GPIOF, sda, GPIO_SPEED_VERY_LOW);
+    gpio_set_speed(GPIOF, scl, GPIO_SPEED_VERY_LOW);
+    gpio_set_function(GPIOF, sda, alt_func_i2c);
+    gpio_set_function(GPIOF, scl, alt_func_i2c);
+
+    // enable IRQ
+    NVIC_SetPriority(I2C1_IRQn, 0);
+    NVIC_EnableIRQ(I2C1_IRQn);
+
+    I2C1->CR1 |= I2C_CR1_ACK;
+}
+
+extern "C"
+void I2C1_IRQHandler()
+{
+    auto status1 = I2C1->SR1;
+    auto status2 = I2C1->SR2;
+
+
+    if(status1 & I2C_SR1_AF)
+    {
+        // nack
+        I2C1->SR1 &= ~I2C_SR1_AF;
+    }
+
+    if(status1 & I2C_SR1_STOPF)
+    {
+        // stop
+        I2C1->CR1 = I2C1->CR1; // need to write CR1 to clear STOP
+    }
+
+    if(status1 & I2C_SR1_BTF)
+    {
+        // byte trans done
+
+        if(status2 & I2C_SR2_TRA)
+        {
+            I2C1->DR = i2c_read_data[i2c_read_offset]; // keep writing
+            i2c_read_offset = (i2c_read_offset + 1) % 4;
+        }
+    }
+
+    if(status1 & I2C_SR1_ADDR)
+    {
+        // got addr
+        if(status2 & I2C_SR2_TRA)
+        {
+            i2c_read_offset = 1;
+            I2C1->DR = i2c_read_data[0]; // this is a read, so we're writing
+        }
+    }
+}
+
 static uint16_t adc_val[2];
 
 static void init_adc()
@@ -203,6 +277,7 @@ int main()
     init_systick();
     init_uart(115200);
     init_adc();
+    init_i2c_slave();
 
     // more inputs
     gpio_set_mode(GPIOA, 0, GPIO_MODE_ALTERNATE);
@@ -238,7 +313,7 @@ int main()
         {
             adc_val[0] = new_val[0];
             adc_val[1] = new_val[1];
-            uart_printf("ADC: %02X %02X\n", adc_val[0], adc_val[1]);
+            //uart_printf("ADC: %02X %02X\n", adc_val[0], adc_val[1]);
         }
 
         auto new_inputs = gpio_get(GPIOA);
@@ -254,6 +329,9 @@ int main()
                     uart_printf("i %i: %i\n", i, new_inputs & (1 << i));
             }
         }
+
+        // merge adc+inputs into a single word
+        *(uint32_t *)i2c_read_data = adc_val[0] | adc_val[1] << 16 | (inputs & 0xF) << 12 | (inputs & 0xF0) << 24;
 
         delay_ms(100);
     }
