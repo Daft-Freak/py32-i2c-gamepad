@@ -291,16 +291,61 @@ static void init_adc()
     gpio_set_mode(GPIOB, adc_y, GPIO_MODE_ANALOG);
 }
 
+static void init_pwm()
+{
+    RCC->APBENR2 |= RCC_APBENR2_TIM1EN;
+
+    TIM1->CR1 |= TIM_CR1_CEN; // enable counter
+    TIM1->CR1 = 0;
+    TIM1->CR2 = 0;
+
+    TIM1->PSC = 8 - 1; // / 8 = 1MHz
+    TIM1->ARR = 1024 - 1;
+    TIM1->RCR = 0;
+
+    TIM1->EGR = TIM_EGR_UG; // generate update
+
+    TIM1->BDTR = TIM_BDTR_MOE; // enable outputs
+    TIM1->CR1 |= TIM_CR1_CEN; // enable counter
+    
+    // setup IO
+    RCC->IOPENR |= RCC_IOPENR_GPIOAEN | RCC_IOPENR_GPIOBEN;
+
+    // PA3/AF13
+    gpio_set_mode(GPIOA, 3, GPIO_MODE_ALTERNATE);
+    gpio_set_output_type(GPIOA, 3, GPIO_OUTPUT_OPEN_DRAIN);
+    gpio_set_function(GPIOA, 3, 13);
+
+    // PB3/AF1
+    // used PB2 instead, whoops
+    //gpio_set_mode(GPIOB, 3, GPIO_MODE_ALTERNATE);
+    //gpio_set_output_type(GPIOB, 3, GPIO_OUTPUT_OPEN_DRAIN);
+    //gpio_set_function(GPIOB, 3, 1);
+
+    gpio_set_mode(GPIOB, 2, GPIO_MODE_OUTPUT);
+    gpio_set_output_type(GPIOB, 2, GPIO_OUTPUT_OPEN_DRAIN);
+
+    // setup channels
+
+    // disable channels
+    TIM1->CCER &= ~(TIM_CCER_CC1E | TIM_CCER_CC2E | TIM_CCER_CC3E);
+
+    // setup ch1/2
+    TIM1->CCMR1 = 7/*PWM 2*/ << TIM_CCMR1_OC1M_Pos | 7/*PWM 2*/ << TIM_CCMR1_OC2M_Pos;
+    TIM1->CCR1 = 0; // compare value
+    TIM1->CCR2 = 0; // compare value
+
+    TIM1->CCER |= TIM_CCER_CC1E | TIM_CCER_CC2E; // enable
+}
+
 int main()
 {
     init_hsi();
     init_systick();
     //init_uart(115200);
     init_adc();
+    init_pwm();
     init_i2c_slave();
-
-    // already inited GPIOB/F
-    RCC->IOPENR |= RCC_IOPENR_GPIOAEN;
 
     // more inputs
     for(int i = 0; i < 3; i++)
@@ -320,6 +365,8 @@ int main()
     gpio_set_pulls(GPIOB, 3, GPIO_PULL_UP);
 
     uint16_t inputs = 0;
+
+    int led = 0;
 
     while(true)
     {
@@ -349,6 +396,12 @@ int main()
 
         // merge adc+inputs into a single word
         *(uint32_t *)i2c_read_data = adc_val[0] | adc_val[1] << 16 | (inputs & 0xF) << 12 | (inputs & 0xF0) << 24;
+
+        led = (led + 1) % 1024;
+        TIM1->CCR1 = led;
+        TIM1->CCR2 = 1023 - led;
+        // ... or not
+        gpio_put(GPIOB, 2, led >= 512);
 
         delay_ms(10);
     }
