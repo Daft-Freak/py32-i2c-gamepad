@@ -285,18 +285,18 @@ int main()
     // more inputs
     for(int i = 0; i < 3; i++)
     {
-        gpio_set_mode(GPIOA, i, GPIO_MODE_ALTERNATE);
+        gpio_set_mode(GPIOA, i, GPIO_MODE_INPUT);
         gpio_set_pulls(GPIOA, i, GPIO_PULL_UP);
     }
 
     for(int i = 4; i < 8; i++)
     {
-        gpio_set_mode(GPIOA, i, GPIO_MODE_ALTERNATE);
+        gpio_set_mode(GPIOA, i, GPIO_MODE_INPUT);
         gpio_set_pulls(GPIOA, i, GPIO_PULL_UP);
     }
 
     // for I2C addr selection
-    gpio_set_mode(GPIOB, 3, GPIO_MODE_ALTERNATE);
+    gpio_set_mode(GPIOB, 3, GPIO_MODE_INPUT);
     gpio_set_pulls(GPIOB, 3, GPIO_PULL_UP);
 
     uint16_t inputs = 0;
