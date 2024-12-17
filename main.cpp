@@ -275,22 +275,29 @@ int main()
 {
     init_hsi();
     init_systick();
-    init_uart(115200);
+    //init_uart(115200);
     init_adc();
     init_i2c_slave();
 
-    // more inputs
-    gpio_set_mode(GPIOA, 0, GPIO_MODE_ALTERNATE);
-    gpio_set_pulls(GPIOA, 0, GPIO_PULL_UP);
-    gpio_set_mode(GPIOA, 1, GPIO_MODE_ALTERNATE);
-    gpio_set_pulls(GPIOA, 1, GPIO_PULL_UP);
+    // already inited GPIOB/F
+    RCC->IOPENR |= RCC_IOPENR_GPIOAEN;
 
-    for(int i = 4; i < 8; i++) {
+    // more inputs
+    for(int i = 0; i < 3; i++)
+    {
         gpio_set_mode(GPIOA, i, GPIO_MODE_ALTERNATE);
         gpio_set_pulls(GPIOA, i, GPIO_PULL_UP);
     }
 
-    uart_puts("testing!\n");
+    for(int i = 4; i < 8; i++)
+    {
+        gpio_set_mode(GPIOA, i, GPIO_MODE_ALTERNATE);
+        gpio_set_pulls(GPIOA, i, GPIO_PULL_UP);
+    }
+
+    // for I2C addr selection
+    gpio_set_mode(GPIOB, 3, GPIO_MODE_ALTERNATE);
+    gpio_set_pulls(GPIOB, 3, GPIO_PULL_UP);
 
     uint16_t inputs = 0;
 
@@ -318,22 +325,12 @@ int main()
 
         auto new_inputs = gpio_get(GPIOA);
 
-        auto changed = new_inputs ^ inputs;
         inputs = new_inputs;
-
-        if(changed)
-        {
-            for(int i = 0; i < 8; i++)
-            {
-                if(changed & (1 << i))
-                    uart_printf("i %i: %i\n", i, new_inputs & (1 << i));
-            }
-        }
 
         // merge adc+inputs into a single word
         *(uint32_t *)i2c_read_data = adc_val[0] | adc_val[1] << 16 | (inputs & 0xF) << 12 | (inputs & 0xF0) << 24;
 
-        delay_ms(100);
+        delay_ms(10);
     }
 
     return 0;
