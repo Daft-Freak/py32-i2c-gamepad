@@ -13,6 +13,12 @@ enum gpio_mode
     GPIO_MODE_ANALOG    = 3,
 };
 
+enum gpio_output_type
+{
+    GPIO_OUTPUT_PUSH_PULL  = 0,
+    GPIO_OUTPUT_OPEN_DRAIN = 1,
+};
+
 enum gpio_speed
 {
     GPIO_SPEED_VERY_LOW  = 0,
@@ -32,6 +38,12 @@ inline void gpio_set_mode(GPIO_TypeDef *port, int pin, int mode)
 {
     port->MODER = (port->MODER & ~(GPIO_MODER_MODE0 << (pin * 2)))
                 | mode << (pin * 2);
+}
+
+inline void gpio_set_output_type(GPIO_TypeDef *port, int pin, int otype)
+{
+    port->OTYPER = (port->OTYPER & ~(GPIO_OTYPER_OT0 << pin))
+                 | otype << pin;
 }
 
 inline void gpio_set_speed(GPIO_TypeDef *port, int pin, int speed)
@@ -55,6 +67,14 @@ inline void gpio_set_function(GPIO_TypeDef *port, int pin, int func)
 inline uint16_t gpio_get(GPIO_TypeDef *port)
 {
     return port->IDR;
+}
+
+inline void gpio_put(GPIO_TypeDef *port, int pin, bool high)
+{
+    if(high)
+        port->BSRR = 1 << pin;
+    else
+        port->BSRR = 1 << (pin + 16);
 }
 
 static void init_hsi()
