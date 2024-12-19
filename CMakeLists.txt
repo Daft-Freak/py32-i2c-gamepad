@@ -17,6 +17,9 @@ target_include_directories(py32-startup INTERFACE
     ${CMAKE_CURRENT_LIST_DIR}/Drivers/CMSIS/Device/PY32F0xx/Include
 )
 
-add_executable(py32-test main.cpp)
+add_executable(py32-test
+    main.cpp
+    uart.c
+)
 target_link_libraries(py32-test py32-startup)
 target_compile_options(py32-test PRIVATE -Wall -Wextra)
