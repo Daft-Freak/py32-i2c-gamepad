@@ -7,6 +7,11 @@
 #include "gpio.h"
 #include "uart.h"
 
+static uint8_t i2c_read_data[4];
+static int i2c_read_offset = 0;
+
+static uint16_t adc_val[2];
+
 static void init_hsi()
 {
     // enable and wait
@@ -47,9 +52,6 @@ static void delay_ms(int ms)
             ms--;
     }
 }
-
-static uint8_t i2c_read_data[4];
-static int i2c_read_offset = 0;
 
 static void init_i2c_slave(uint8_t addr)
 {
@@ -121,8 +123,6 @@ void I2C1_IRQHandler()
         }
     }
 }
-
-static uint16_t adc_val[2];
 
 extern "C" void ADC_COMP_IRQHandler()
 {
