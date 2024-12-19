@@ -332,8 +332,14 @@ static void init_pwm()
     //gpio_set_output_type(GPIOB, 3, GPIO_OUTPUT_OPEN_DRAIN);
     //gpio_set_function(GPIOB, 3, 1);
 
+    // final one should be ch3 (attempted to use A6, but that's also BOOT0)
+
+
     gpio_set_mode(GPIOB, 2, GPIO_MODE_OUTPUT);
     gpio_set_output_type(GPIOB, 2, GPIO_OUTPUT_OPEN_DRAIN);
+
+    gpio_set_mode(GPIOA, 5, GPIO_MODE_OUTPUT);
+    gpio_set_output_type(GPIOA, 5, GPIO_OUTPUT_OPEN_DRAIN);
 
     // setup channels
 
@@ -379,6 +385,7 @@ int main()
 
     for(int i = 4; i < 8; i++)
     {
+        if(i == 5) continue; // R
         gpio_set_mode(GPIOA, i, GPIO_MODE_INPUT);
         gpio_set_pulls(GPIOA, i, GPIO_PULL_UP);
     }
@@ -423,7 +430,8 @@ int main()
         TIM1->CCR1 = led;
         TIM1->CCR2 = 1023 - led;
         // ... or not
-        gpio_put(GPIOB, 2, led >= 512);
+        gpio_put(GPIOB, 2, (led * 3) % 1024 >= 512);
+        gpio_put(GPIOA, 5, (led * 5) % 1024 < 512);
 
         delay_ms(10);
     }
