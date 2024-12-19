@@ -189,13 +189,13 @@ static int uart_printf(const char *format, ...) {
 static uint8_t i2c_read_data[4];
 static int i2c_read_offset = 0;
 
-static void init_i2c_slave()
+static void init_i2c_slave(uint8_t addr)
 {
     // enable I2C clock
     RCC->APBENR1 |= RCC_APBENR1_I2CEN;
 
     I2C1->CR2 = I2C_CR2_ITEVTEN | I2C_CR2_ITERREN | 8 << I2C_CR2_FREQ_Pos;
-    I2C1->OAR1 = 0x55 << 1;
+    I2C1->OAR1 = addr << 1;
     I2C1->CR1 = I2C_CR1_PE;
 
     // enable GPIO clock
@@ -352,10 +352,23 @@ int main()
 {
     init_hsi();
     init_systick();
+
+    // enable IO
+    RCC->IOPENR |= RCC_IOPENR_GPIOAEN | RCC_IOPENR_GPIOBEN | RCC_IOPENR_GPIOFEN;
+
+    // for I2C addr selection
+    gpio_set_mode(GPIOB, 3, GPIO_MODE_INPUT);
+    gpio_set_pulls(GPIOB, 3, GPIO_PULL_UP);
+
+    uint8_t i2c_addr = 0x55;
+
+    if(gpio_get(GPIOB) & (1 << 3))
+        i2c_addr |= 2;
+
     //init_uart(115200);
     init_adc();
     init_pwm();
-    init_i2c_slave();
+    init_i2c_slave(i2c_addr);
 
     // more inputs
     for(int i = 0; i < 3; i++)
@@ -370,9 +383,6 @@ int main()
         gpio_set_pulls(GPIOA, i, GPIO_PULL_UP);
     }
 
-    // for I2C addr selection
-    gpio_set_mode(GPIOB, 3, GPIO_MODE_INPUT);
-    gpio_set_pulls(GPIOB, 3, GPIO_PULL_UP);
 
     uint16_t inputs = 0;
 
