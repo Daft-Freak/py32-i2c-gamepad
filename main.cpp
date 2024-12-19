@@ -257,6 +257,10 @@ void I2C1_IRQHandler()
 
 static uint16_t adc_val[2];
 
+extern "C" void ADC_COMP_IRQHandler()
+{
+}
+
 static void init_adc()
 {
     // enable ADC clock
@@ -277,6 +281,7 @@ static void init_adc()
     ADC1->CFGR2 = 0; // div = 1?
     ADC1->SMPR = 6; // 71.5 cycles
     ADC1->CHSELR = 3 << 8; // B0/1
+    ADC1->IER = ADC_IER_EOCIE;
 
     ADC1->CR = ADC_CR_ADEN;
 
@@ -377,7 +382,9 @@ int main()
             ADC1->CR = ADC_CR_ADEN; // needing to re-enable seems strange?
             ADC1->CR = ADC_CR_ADSTART;
 
-            while(!(ADC1->ISR & ADC_ISR_EOC));
+            while(!(ADC1->ISR & ADC_ISR_EOC))
+                asm volatile("wfe");
+
             ADC1->ISR = ADC_ISR_EOC;
 
             new_val[i] = ADC1->DR;
