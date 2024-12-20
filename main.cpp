@@ -29,7 +29,8 @@ static const uint16_t led_gamma_10[]
 };
 
 static uint8_t i2c_read_data[4];
-static int i2c_read_offset = 0;
+static uint8_t i2c_write_data[16];
+static int i2c_read_offset = 0, i2c_write_offset = 0;
 
 static uint16_t adc_val[2];
 
@@ -79,7 +80,7 @@ static void init_i2c_slave(uint8_t addr)
     // enable I2C clock
     RCC->APBENR1 |= RCC_APBENR1_I2CEN;
 
-    I2C1->CR2 = I2C_CR2_ITEVTEN | I2C_CR2_ITERREN | 8 << I2C_CR2_FREQ_Pos;
+    I2C1->CR2 = I2C_CR2_ITBUFEN | I2C_CR2_ITEVTEN | I2C_CR2_ITERREN | 8 << I2C_CR2_FREQ_Pos;
     I2C1->OAR1 = addr << 1;
     I2C1->CR1 = I2C_CR1_PE;
 
@@ -123,6 +124,13 @@ void I2C1_IRQHandler()
         I2C1->CR1 = I2C1->CR1; // need to write CR1 to clear STOP
     }
 
+    if(status1 & I2C_SR1_RXNE)
+    {
+        // RX not empty
+        i2c_write_data[i2c_write_offset] = I2C1->DR;
+        i2c_write_offset = (i2c_write_offset + 1) % 16;
+    }
+
     if(status1 & I2C_SR1_BTF)
     {
         // byte trans done
@@ -141,6 +149,10 @@ void I2C1_IRQHandler()
         {
             i2c_read_offset = 1;
             I2C1->DR = i2c_read_data[0]; // this is a read, so we're writing
+        }
+        else
+        {
+            i2c_write_offset = 0;
         }
     }
 }
