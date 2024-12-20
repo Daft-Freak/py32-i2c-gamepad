@@ -285,10 +285,7 @@ int main()
         gpio_set_pulls(GPIOA, i, GPIO_PULL_UP);
     }
 
-
     uint16_t inputs = 0;
-
-    int led = 0;
 
     while(true)
     {
@@ -321,12 +318,18 @@ int main()
         // merge adc+inputs into a single word
         *(uint32_t *)i2c_read_data = adc_val[0] | adc_val[1] << 16 | (inputs & 0xF) << 12 | (inputs & 0xF0) << 24;
 
-        led = (led + 1) % 256;
-        TIM1->CCR1 = led_gamma_10[led];
-        TIM1->CCR2 = led_gamma_10[255 - led];
-        // ... or not
-        gpio_put(GPIOB, 2, led_gamma_10[(led * 3) % 256] >= 512);
-        gpio_put(GPIOA, 5, led_gamma_10[(led * 5) % 256] < 512);
+        // LED update
+        uint16_t r = led_gamma_10[i2c_write_data[0]];
+        uint16_t g = led_gamma_10[i2c_write_data[1]];
+        uint16_t b = led_gamma_10[i2c_write_data[2]];
+
+        TIM1->CCR1 = g;
+        TIM1->CCR2 = b;
+        TIM1->CCR3 = r;
+
+        // temp hack so R/B do something
+        gpio_put(GPIOB, 2, b < 512);
+        gpio_put(GPIOA, 5, r < 512);
 
         delay_ms(10);
     }
