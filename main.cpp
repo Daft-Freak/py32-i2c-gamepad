@@ -263,6 +263,8 @@ int main()
 
     uint8_t i2c_addr = 0x55;
 
+    delay_ms(1);
+
     if(gpio_get(GPIOB) & (1 << 3))
         i2c_addr |= 2;
 
