@@ -7,6 +7,15 @@
 #include "gpio.h"
 #include "uart.h"
 
+// LED R/G pins wrong
+// #define BROKEN_V1
+
+#ifdef BROKEN_V1
+#define I2C_ADDR_PIN 3
+#else
+#define I2C_ADDR_PIN 2
+#endif
+
 // pow(x, 2.2)
 static const uint16_t led_gamma_10[]
 {
@@ -221,20 +230,24 @@ static void init_pwm()
     gpio_set_output_type(GPIOA, 3, GPIO_OUTPUT_OPEN_DRAIN);
     gpio_set_function(GPIOA, 3, 13);
 
+#ifndef BROKEN_V1
     // PB3/AF1
-    // used PB2 instead, whoops
-    //gpio_set_mode(GPIOB, 3, GPIO_MODE_ALTERNATE);
-    //gpio_set_output_type(GPIOB, 3, GPIO_OUTPUT_OPEN_DRAIN);
-    //gpio_set_function(GPIOB, 3, 1);
+    gpio_set_mode(GPIOB, 3, GPIO_MODE_ALTERNATE);
+    gpio_set_output_type(GPIOB, 3, GPIO_OUTPUT_OPEN_DRAIN);
+    gpio_set_function(GPIOB, 3, 1);
 
-    // final one should be ch3 (attempted to use A6, but that's also BOOT0)
-
-
+    // PA0/AF13
+    gpio_set_mode(GPIOA, 0, GPIO_MODE_ALTERNATE);
+    gpio_set_output_type(GPIOA, 0, GPIO_OUTPUT_OPEN_DRAIN);
+    gpio_set_function(GPIOA, 0, 13);
+#else
+    // non-PWM workaround pins
     gpio_set_mode(GPIOB, 2, GPIO_MODE_OUTPUT);
     gpio_set_output_type(GPIOB, 2, GPIO_OUTPUT_OPEN_DRAIN);
 
     gpio_set_mode(GPIOA, 5, GPIO_MODE_OUTPUT);
     gpio_set_output_type(GPIOA, 5, GPIO_OUTPUT_OPEN_DRAIN);
+#endif
 
     // setup channels
 
@@ -246,7 +259,11 @@ static void init_pwm()
     TIM1->CCR1 = 0; // compare value
     TIM1->CCR2 = 0; // compare value
 
-    TIM1->CCER |= TIM_CCER_CC1E | TIM_CCER_CC2E; // enable
+    // setup ch3
+    TIM1->CCMR2 = 7/*PWM 2*/ << TIM_CCMR2_OC3M_Pos;
+    TIM1->CCR3 = 0;
+
+    TIM1->CCER |= TIM_CCER_CC1E | TIM_CCER_CC2E | TIM_CCER_CC3E; // enable
 }
 
 int main()
@@ -258,14 +275,14 @@ int main()
     RCC->IOPENR |= RCC_IOPENR_GPIOAEN | RCC_IOPENR_GPIOBEN | RCC_IOPENR_GPIOFEN;
 
     // for I2C addr selection
-    gpio_set_mode(GPIOB, 3, GPIO_MODE_INPUT);
-    gpio_set_pulls(GPIOB, 3, GPIO_PULL_UP);
+    gpio_set_mode(GPIOB, I2C_ADDR_PIN, GPIO_MODE_INPUT);
+    gpio_set_pulls(GPIOB, I2C_ADDR_PIN, GPIO_PULL_UP);
 
     uint8_t i2c_addr = 0x55;
 
     delay_ms(1);
 
-    if(gpio_get(GPIOB) & (1 << 3))
+    if(gpio_get(GPIOB) & (1 << I2C_ADDR_PIN))
         i2c_addr |= 2;
 
     //init_uart(115200);
@@ -274,18 +291,25 @@ int main()
     init_i2c_slave(i2c_addr);
 
     // more inputs
-    for(int i = 0; i < 3; i++)
+    for(int i = 0; i < 8; i++)
     {
+        if(i == 3) continue; // LED B (G on V1)
+#ifdef BROKEN_V1
+        if(i == 5) continue; // LED R
+#else
+        if(i == 0) continue; // LED G
+#endif
         gpio_set_mode(GPIOA, i, GPIO_MODE_INPUT);
         gpio_set_pulls(GPIOA, i, GPIO_PULL_UP);
     }
 
-    for(int i = 4; i < 8; i++)
-    {
-        if(i == 5) continue; // R
-        gpio_set_mode(GPIOA, i, GPIO_MODE_INPUT);
-        gpio_set_pulls(GPIOA, i, GPIO_PULL_UP);
-    }
+#ifndef BROKEN_V1
+    // used to be A0
+    gpio_set_mode(GPIOB, 6, GPIO_MODE_INPUT);
+    gpio_set_mode(GPIOF, 4, GPIO_MODE_INPUT); // pin is mapped to both
+    gpio_set_pulls(GPIOB, 6, GPIO_PULL_UP);
+    gpio_set_pulls(GPIOF, 4, GPIO_PULL_UP);
+#endif
 
     uint16_t inputs = 0;
 
@@ -314,6 +338,10 @@ int main()
         }
 
         auto new_inputs = gpio_get(GPIOA);
+#ifndef BROKEN_V1
+        // first button moved to B6
+        new_inputs = (new_inputs & ~1) | ((gpio_get(GPIOB) >> 6) & 1);
+#endif
 
         inputs = new_inputs;
 
@@ -325,13 +353,16 @@ int main()
         uint16_t g = led_gamma_10[i2c_write_data[1]];
         uint16_t b = led_gamma_10[i2c_write_data[2]];
 
+#ifdef BROKEN_V1
         TIM1->CCR1 = g;
-        TIM1->CCR2 = b;
-        TIM1->CCR3 = r;
-
-        // temp hack so R/B do something
+        // hack so R/B do something
         gpio_put(GPIOB, 2, b < 512);
         gpio_put(GPIOA, 5, r < 512);
+#else
+        TIM1->CCR1 = b;
+        TIM1->CCR2 = r;
+        TIM1->CCR3 = g;
+#endif
 
         delay_ms(10);
     }
