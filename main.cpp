@@ -416,7 +416,7 @@ int main()
 
         new_val[1] -= calib_min[1];
         new_val[1] = (new_val[1] << 12) / (calib_max[1] - calib_min[1]);
-        new_val[0] = std::max(0, std::min((1 << 12) - 1, new_val[0]));
+        new_val[1] = std::max(0, std::min((1 << 12) - 1, new_val[1]));
 
         // store new value
         adc_val[0] = new_val[0];
