@@ -16,6 +16,9 @@
 #define I2C_ADDR_PIN 2
 #endif
 
+#define FLASH_CONFIG_ADDR (FLASH_END + 1 - FLASH_SECTOR_SIZE)
+#define FLASH_CONFIG_MAGIC 0x55AA
+
 // pow(x, 2.2)
 static const uint16_t led_gamma_10[]
 {
@@ -268,6 +271,51 @@ static void init_pwm()
     TIM1->CCER |= TIM_CCER_CC1E | TIM_CCER_CC2E | TIM_CCER_CC3E; // enable
 }
 
+[[gnu::section(".ram_func")]] [[gnu::noinline]]
+void write_flash_config(const uint16_t *data, unsigned len) {
+    // disable irqs so we don't use flash
+    __disable_irq();
+
+    // this assumes that we're writing less than one page
+    auto dest_ptr = (uint32_t *)FLASH_CONFIG_ADDR;
+    auto in_32 = (uint32_t *)data;
+
+    // unlock
+    if(FLASH->CR & FLASH_CR_LOCK) {
+        FLASH->KEYR = FLASH_KEY1;
+        FLASH->KEYR = FLASH_KEY2;
+
+        // failed to unlock, give up
+        if(FLASH->CR & FLASH_CR_LOCK)
+            return;
+    }
+
+    // erase
+    while(FLASH->SR & FLASH_SR_BSY);
+    FLASH->CR |= FLASH_CR_PER;
+    *dest_ptr = 0xFF;
+    while(FLASH->SR & FLASH_SR_BSY);
+
+    // write
+    FLASH->CR |= FLASH_CR_PG;
+    for(unsigned i = 0; i < FLASH_PAGE_SIZE; i += 4) {
+        // start if last word
+        if(i + 4 == FLASH_PAGE_SIZE)
+            FLASH->CR |= FLASH_CR_PGSTRT;
+
+        if(i < len)
+            *dest_ptr++ = *in_32++;
+        else
+            *dest_ptr++ = 0xFFFFFFFF;
+    }
+    while(FLASH->SR & FLASH_SR_BSY);
+
+    // lock
+    FLASH->CR |= FLASH_CR_LOCK;
+
+    __enable_irq();
+}
+
 int main()
 {
     init_hsi();
@@ -317,13 +365,35 @@ int main()
     auto calib_min = (uint16_t *)(i2c_write_data + 4);
     auto calib_max = (uint16_t *)(i2c_write_data + 8);
 
-    calib_min[0] = calib_min[1] = 0;
-    calib_max[0] = calib_max[1] = 1 << 12;
+    auto flash_calib = (uint16_t *)FLASH_CONFIG_ADDR;
+
+    if(flash_calib[0] == FLASH_CONFIG_MAGIC) {
+        calib_min[0] = flash_calib[1];
+        calib_min[1] = flash_calib[2];
+        calib_max[0] = flash_calib[3];
+        calib_max[1] = flash_calib[4];
+    } else {
+        calib_min[0] = calib_min[1] = 0;
+        calib_max[0] = calib_max[1] = 1 << 12;
+    }
 
     uint16_t inputs = 0;
 
     while(true)
     {
+        if(i2c_write_data[3] == 0xA5) {
+            i2c_write_data[3] = 0;
+
+            // save calibration
+            uint16_t save_buf[5];
+            save_buf[0] = FLASH_CONFIG_MAGIC;
+            save_buf[1] = calib_min[0];
+            save_buf[2] = calib_min[1];
+            save_buf[3] = calib_max[0];
+            save_buf[4] = calib_max[1];
+            write_flash_config(save_buf, 5 * sizeof(uint16_t));
+        }
+
         // read ADC
         int new_val[2];
         for(int i = 0; i < 2; i++)
