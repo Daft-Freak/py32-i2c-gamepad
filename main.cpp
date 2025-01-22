@@ -146,8 +146,10 @@ void I2C1_IRQHandler()
 
         if(status2 & I2C_SR2_TRA)
         {
-            I2C1->DR = i2c_read_data[i2c_read_offset]; // keep writing
-            i2c_read_offset = (i2c_read_offset + 1) % 4;
+            // read the calibration data from the write buffer after the actual data
+            auto data = i2c_read_offset >= 4 ? i2c_write_data : i2c_read_data;
+            I2C1->DR = data[i2c_read_offset]; // keep writing
+            i2c_read_offset = (i2c_read_offset + 1) % 16;
         }
     }
 
@@ -311,12 +313,19 @@ int main()
     gpio_set_pulls(GPIOF, 4, GPIO_PULL_UP);
 #endif
 
+    // init calibration
+    auto calib_min = (uint16_t *)(i2c_write_data + 4);
+    auto calib_max = (uint16_t *)(i2c_write_data + 8);
+
+    calib_min[0] = calib_min[1] = 0;
+    calib_max[0] = calib_max[1] = 1 << 12;
+
     uint16_t inputs = 0;
 
     while(true)
     {
         // read ADC
-        uint16_t new_val[2];
+        int new_val[2];
         for(int i = 0; i < 2; i++)
         {
             ADC1->CR = ADC_CR_ADEN; // needing to re-enable seems strange?
@@ -330,12 +339,18 @@ int main()
             new_val[i] = ADC1->DR;
         }
 
-        if(std::abs(new_val[0] - adc_val[0]) > 8 || std::abs(new_val[1] - adc_val[1]) > 8)
-        {
-            adc_val[0] = new_val[0];
-            adc_val[1] = new_val[1];
-            //uart_printf("ADC: %02X %02X\n", adc_val[0], adc_val[1]);
-        }
+        // apply calibration scale
+        new_val[0] -= calib_min[0];
+        new_val[0] = (new_val[0] << 12) / (calib_max[0] - calib_min[0]);
+        new_val[0] = std::max(0, std::min((1 << 12) - 1, new_val[0]));
+
+        new_val[1] -= calib_min[1];
+        new_val[1] = (new_val[1] << 12) / (calib_max[1] - calib_min[1]);
+        new_val[0] = std::max(0, std::min((1 << 12) - 1, new_val[0]));
+
+        // store new value
+        adc_val[0] = new_val[0];
+        adc_val[1] = new_val[1];
 
         auto new_inputs = gpio_get(GPIOA);
 #ifndef BROKEN_V1
