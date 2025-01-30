@@ -123,6 +123,11 @@ void I2C1_IRQHandler()
     auto status1 = I2C1->SR1;
     auto status2 = I2C1->SR2;
 
+    if(status1 & I2C_SR1_BERR)
+    {
+        // bus error
+        I2C1->SR1 &= ~I2C_SR1_BERR;
+    }
 
     if(status1 & I2C_SR1_AF)
     {
@@ -136,38 +141,29 @@ void I2C1_IRQHandler()
         I2C1->CR1 = I2C1->CR1; // need to write CR1 to clear STOP
     }
 
+    // need to check this before rx/tx
+    if(status1 & I2C_SR1_ADDR)
+    {
+        // got addr
+        if(status2 & I2C_SR2_TRA)
+            i2c_read_offset = 0;
+        else
+            i2c_write_offset = 0;
+    }
+
+    if(status1 & I2C_SR1_TXE)
+    {
+        // read the calibration data from the write buffer after the actual data
+        auto data = i2c_read_offset >= 4 ? i2c_write_data : i2c_read_data;
+        I2C1->DR = data[i2c_read_offset]; // keep writing
+        i2c_read_offset = (i2c_read_offset + 1) % 16;
+    }
+
     if(status1 & I2C_SR1_RXNE)
     {
         // RX not empty
         i2c_write_data[i2c_write_offset] = I2C1->DR;
         i2c_write_offset = (i2c_write_offset + 1) % 16;
-    }
-
-    if(status1 & I2C_SR1_BTF)
-    {
-        // byte trans done
-
-        if(status2 & I2C_SR2_TRA)
-        {
-            // read the calibration data from the write buffer after the actual data
-            auto data = i2c_read_offset >= 4 ? i2c_write_data : i2c_read_data;
-            I2C1->DR = data[i2c_read_offset]; // keep writing
-            i2c_read_offset = (i2c_read_offset + 1) % 16;
-        }
-    }
-
-    if(status1 & I2C_SR1_ADDR)
-    {
-        // got addr
-        if(status2 & I2C_SR2_TRA)
-        {
-            i2c_read_offset = 1;
-            I2C1->DR = i2c_read_data[0]; // this is a read, so we're writing
-        }
-        else
-        {
-            i2c_write_offset = 0;
-        }
     }
 }
 
